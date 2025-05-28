@@ -504,7 +504,12 @@ where
   | .attr _ id .store => throw s!"cannot assign to attribute {id}"
   | .tuple es .store => return .tuple (<- es.attach.mapM fun ⟨ e, _ ⟩ => LValue e)
   | .list es .store => return .list (<- es.attach.mapM fun ⟨ e, _ ⟩ => LValue e)
-  | .subscript _ _ .store => throw "unimp subscript store"
+  | .subscript t idx .store =>
+      match t.expr, idx.expr with
+      | .name id _, .const .ellipsis =>
+        -- TODO: in-place update?
+        return .expr (.value $ .var id) (.obj "object".toName)
+      | _, _ => throw "unimp subscript store"
   | _ => throw "cannot assign to expression"
 
 -- Convert an R-Value to a pure expression, emitting
@@ -623,14 +628,19 @@ termination_by (stop - start).natAbs
 def termToIter : Term -> Err (List Term)
   | .tuple l | .list l => return l
   | .expr (.call "range" l _) _ =>
-       match l with
-       | [ .int e ] => return (range 0 e 1)
-       | [ .int s, .int e ] => return (range s e 1)
-       | [ .int s, .int e, .int t ] =>
-           if t == 0
-           then throw "range arg 3 must not be zero"
-           else return (range s e t)
-       | _ => throw "invalid argument to range"
+      match l with
+      | [ .int e ] => return (range 0 e 1)
+      | [ .int s, .int e ] => return (range s e 1)
+      | [ .int s, .int e, .int t ] =>
+          if t == 0
+          then throw "range arg 3 must not be zero"
+          else return (range s e t)
+      | _ => throw "invalid argument to range"
+  | .expr (.call "nki.language.affine_range" l _) _ =>
+      -- Must behave equally to the simple sequential loop.
+      match l with
+      | [ .int e ] => return (range 0 e 1)
+      | _ => throw "invalid argument to nki.language.affine_range"
   | _ => throw "unsupported loop iterator"
 
 /-
